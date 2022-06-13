@@ -19,7 +19,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 class LN():
-    def __init__(self, agent_ct, cognate_Tcell, end, vis_res, affinity_mean = 1, affinity_shape = 1.1):
+    def __init__(self, agent_ct, cognate_Tcell, end, vis_res, affinity_mean = 1, affinity_shape = 1.1, antigen_conc_0 = 10**3):
         # Figure 2: vary DC cognate concentration/frequency in cognate_DC
         # Figure 3: vary number of starting T cells in agent_ct <Here I think we rather want to vary cognate T cell fraction
         # Figure 4: introduce TaAPCs into simulation in run_LN.py file 
@@ -95,6 +95,7 @@ class LN():
         self.antigen = 0 #antigen concentration in the LN used to determine probablity of DC -> cognate DC
         self.drain_rate = -1.3*10**-5 #[1/s] rate of antigen drainage out of the LN based on an assumed first order kinetics w/ 15 hr half life (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1457277/?page=4)
         self.drain_pct = 0.01 #fraction of antigen that actually makes it to the LN
+        self.antigen_conc_0 = antigen_conc_0
         
         #Internal parameters that we are keeping track of in relation to simulation operation. Mostly for troubleshooting.
         self.interactions = 0
@@ -345,7 +346,7 @@ class LN():
         self.start_time = time.time()
         
         # Initialize the Knee drainage compartment
-        self.comps['Knee'] = Knee(10**2)
+        self.comps['Knee'] = Knee(self.antigen_conc_0)
         
         ID_run = 0
         # Add defined number of each type of agent to agents:
@@ -702,7 +703,7 @@ class LN():
                     
                     self.cogDCs -= 1
 
-    def vis(self):
+    def vis(self, save_file = False, filename = 'Figure'):
         '''
         Plot and visualize all agents within the computational domain.
 
@@ -751,8 +752,14 @@ class LN():
             
         for ID in self.get_TaAPC_ID():
             plotSph(ax, disk(self.agents[ID].pos*6-self.border*6, self.agents[ID].radius), self.agents[ID])
+        
+        if save_file == False:
             
-        plt.show()
+            plt.show()
+            
+        elif save_file == True:
+            filename = filename + '.png'
+            plt.savefig(filename)
 
     
     def compile_data(self):
@@ -790,7 +797,7 @@ class LN():
         elif self.chkpt50 and self.run_pct >= 50:
             self.chkpt50 = False
             print('The simulation is at 50%, and it has been running for ' + str((time.time() - self.start_time)/60) + 'minutes and it is ' + str(time.time()))
-            self.vis()
+            #self.vis()
         
         elif self.chkpt75 and self.run_pct >= 75:
             self.chkpt75 = False
@@ -801,6 +808,22 @@ class LN():
             self.chkpt100 = False
             print('The simulation is at 100%, and it has been running for ' + str((time.time() - self.start_time)/60) + 'minutes and it is ' + str(time.time()))
             # self.vis()
+            total_runtime = str((time.time() - self.start_time)/60)
+            with open('run_log.txt', 'w') as f:
+                f.write('Runtime: ' + total_runtime)
+                f.write('\n')
+                f.write('Tcell Start Count: ' + str(self.agent_ct['Tcell']))
+                f.write('\n')
+                f.write('Affinity Mean: ' + str(self.affinity_mean))
+                f.write('\n')
+                f.write('Affinity Shape: ' + str(self.affinity_shape))
+                f.write('\n')
+                f.write('Cog T Start Fraction: ' + str(self.cognate_Tcell))
+                f.write('\n')
+                f.write('Simulation Time: ' + str(self.time))
+                f.write('\n' + 'Number of Timesteps: ' + str(self.time/self.tau))
+                f.write('\n' + 'Initial antigen concentration: ' + str(self.antigen_conc_0))
+                
         
         return[self.liveT, self.goneT, self.comps['Knee'].antigen[self.comps['Knee'].intime - 1], self.comps['Knee'].Tcell[self.comps['Knee'].intime - 1], self.cogDCs, self.antigen, self.bounds]
     

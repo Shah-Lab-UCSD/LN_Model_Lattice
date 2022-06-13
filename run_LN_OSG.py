@@ -10,6 +10,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
+import argparse
 
 from Agent import Agent
 from Tcell import Tcell
@@ -19,7 +20,7 @@ import LN
 
 
 # Need to refine this
-def sim(trials, agent_ct, cognate_Tcell, end = 60*60*24*8, vis_res = 40, affinity_mean = 1, affinity_shape = 1.1, antigen_conc_0 = 10**3):
+def sim(trials, agent_ct, cognate_Tcell, end = 60*60*24*8, vis_res = 40, affinity_mean = 1, affinity_shape = 1.1, antigen_conc_0 = 10**3, fname = 'Figure'):
     
     col = ['n_Tcell, n_Tcell_alive, n_Tcell_dead, n_DC_contact, n_Tcell_contact, n_TaAPC_contact, n_Tcell_active']
     df = pd.DataFrame(columns=col)
@@ -32,7 +33,7 @@ def sim(trials, agent_ct, cognate_Tcell, end = 60*60*24*8, vis_res = 40, affinit
         if i == 0:
             dataBloc = np.zeros((trials, 7, steps))
             
-        LN1.vis()
+        LN1.vis(save_file = True, filename = "INIT_" + fname)
         
         for j in range(steps):
             LN1.Recruitment()
@@ -43,7 +44,7 @@ def sim(trials, agent_ct, cognate_Tcell, end = 60*60*24*8, vis_res = 40, affinit
             LN1.update_time()
             dataBloc[i, :, j] = LN1.export_data()
             #LN1.vis()
-        LN1.vis()
+        LN1.vis(save_file = True, filename = "END_" + fname)
         
         data = []
         for key in LN1.recorded_data:
@@ -89,34 +90,58 @@ def main():
 
     return [Tcell_data, antigen_data]
 
-conditions = [1.1, 2, 5, 10]
-print('Please input the simulation time in seconds')
-time = int(input())
-print('Please input the fraction of cognate T cells')
-cognate_Tcell = float(input())
-print('Please input the total number of T cells to simulate')
-Tcell = int(input())
-print('Please input the mean for the lognormal distribution')
-mean = float(input())
-print('Please input the shape factor for the lognormal distribution')
-shape = float(input())
-print('Please input the inital antigen concentration in the knee')
-a_conc_0 = float(input())
-agent_ct = {'Tcell':Tcell, 'DC':0, 'TaAPC':0}
-filename = "Data_time" + str(time) + "_cog" + str(cognate_Tcell) + "_T" + str(Tcell) + "_mean" + str(mean) + "_shape" + str(shape) + ".csv"
+#%% Build Parser and determine if running from console or IPython
+my_parser = argparse.ArgumentParser(fromfile_prefix_chars='@',description='Retreive input for model parameters')
+my_parser.add_argument('SimTime',type=int, help = 'Number of simulated seconds')
+my_parser.add_argument('CogT', type=float, help = 'Fraction of cognate T cells')
+my_parser.add_argument('Tcell', type=int, help = 'Number of T cells to simulate')
+my_parser.add_argument('mean', type = float, help = 'Mean for lognorm distro of affinities')
+my_parser.add_argument('shape', type = float, help = 'Shape factor for lognorm distro of affinities')
+my_parser.add_argument('antigen', type = float, help = 'Initial antigen concentration in knee')
 
-[dataBloc, t, ds] = sim(1, agent_ct, cognate_Tcell, end = time, vis_res = 40, affinity_mean = mean, affinity_shape = shape, antigen_conc_0 = a_conc_0)
+try:
+    __IPYTHON__
+except NameError:
+    print("Not running in IPython so will parse arguments")
+    args =  my_parser.parse_args()
+    time = args.SimTime
+    cognate_Tcell = args.CogT
+    Tcell_num = args.Tcell
+    mean = args.mean
+    shape = args.shape
+    a_conc_0 = args.antigen
+    print('Parsed successfully.')
+else:
+    print("Running in IPython")
+    conditions = [1.1, 2, 5, 10]
+    print('Please input the simulation time in seconds')
+    time = int(input())
+    print('Please input the fraction of cognate T cells')
+    cognate_Tcell = float(input())
+    print('Please input the total number of T cells to simulate')
+    Tcell_num = int(input())
+    print('Please input the mean for the lognormal distribution')
+    mean = float(input())
+    print('Please input the shape factor for the lognormal distribution')
+    shape = float(input())
+    print('Please input the inital antigen concentration in the knee')
+    a_conc_0 = float(input())
+    
+agent_ct = {'Tcell':Tcell_num, 'DC':0, 'TaAPC':0}
+filename = "Data_time" + str(time) + "_cog" + str(cognate_Tcell) + "_T" + str(Tcell_num) + "_mean" + str(mean) + "_shape" + str(shape) + ".csv"
+
+[dataBloc, t, ds] = sim(1, agent_ct, cognate_Tcell, end = time, vis_res = 40, affinity_mean = mean, affinity_shape = shape, antigen_conc_0 = a_conc_0, fname = filename)
 np.savetxt(fname = filename, X = dataBloc[0,:,:], delimiter=',')
 
-plt.plot(t, dataBloc[0,0,:])
-plt.xlabel('Time (h)')
-plt.ylabel('T cells in LN')
-plt.show()
+# plt.plot(t, dataBloc[0,0,:])
+# plt.xlabel('Time (h)')
+# plt.ylabel('T cells in LN')
+# plt.show()
 
-plt.plot(t, dataBloc[0,2,:])
-plt.xlabel('Time (h)')
-plt.ylabel('Antigen Concentration in Knee')
-plt.show()
+# plt.plot(t, dataBloc[0,2,:])
+# plt.xlabel('Time (h)')
+# plt.ylabel('Antigen Concentration in Knee')
+# plt.show()
 
 
 
