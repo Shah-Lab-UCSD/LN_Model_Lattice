@@ -41,10 +41,14 @@ class Tcell(Agent):
         self.death_tlim = 60*60*8 # time since cell death until cell is cleared from simulation
         
         ########## ACTIVATION AND EXPANSION: ##########
+        
+        ### STIMULATION PARAMETERS ###
+        
         self.mature = False
         self.cognate = True
         self.PD1 = 0 # PD1 expression arbitrary value
         self.avidity = 0
+        self.D = -0.001
         self.S = 0
         self.E1 = 100 #Activation threshold to swithc to phase 2
         self.E2 = 200 #Activation threshold to switch to phase 3
@@ -63,6 +67,8 @@ class Tcell(Agent):
         
         self.phase = 0
         
+        ### CONTACT PARAMETERS ###
+        
         self.contact_t = 0              # time in contact with neighbor
         self.contact_tlim = 0           # maximum time in contact and interacting with neighbor
         self.contact_status = False     # currently interacting with neighbor?
@@ -80,6 +86,8 @@ class Tcell(Agent):
         self.tlim_supp_cog = [7, 2]*60          # cognate T cell-TaAPC contact time
         self.tlim_supp_noncog = [4, 0.25]*60    # noncognate T cell-TaAPC contact time
         
+        ### DIVISION PARAMETERS ###
+        
         self.div_ability = False # whether T cell can divide; requires stimulation event during phase 2
         self.div_status = False # whether T cell is dividing or not
         self.div_n = 0          # number of divisions
@@ -90,6 +98,7 @@ class Tcell(Agent):
         self.div_can_cdlim = 60*60*5   # total cooldown time for divisions to start occuring again
         self.div_can_cd = self.div_can_cdlim # current cooldown time for able to divide again; count down
         
+        ### STIMULATION COUNTERS ###
         
         self.stim_p1 = 0 # number of times successfully stimulated in P1
         self.stim_p2 = 0 # " in P2
@@ -106,8 +115,12 @@ class Tcell(Agent):
     
     ## setters
     
-    def set_avidity(self, mean = 1, shape = 1.1):
-        self.avidity = np.random.lognormal(mean, np.log(shape))
+    def set_avidity(self, mean = 1, shape = 1.1, df = 5):
+        ##self.avidity = np.random.lognormal(mean, np.log(shape))
+        self.avidity  = np.random.chisquare(df)/df*3
+        
+    def decay_T(self):
+        self.S -=self.S*self.D
         
     def stimulate_T(self):
         self.S += self.avidity
@@ -134,5 +147,6 @@ class Tcell(Agent):
             self.pos = np.array([x,y,z])
             local_fill[x_shift,y_shift,z_shift] = 0
             return local_fill
+
         
     

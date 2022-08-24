@@ -38,7 +38,7 @@ class LN():
         self.chkpt75 = True
         self.chkpt100 = True
         
-        
+        self.div_check_temp = True
         
         self.run_pct = 0
         self.time = 0
@@ -380,6 +380,7 @@ class LN():
             self.agents[ID].pos = np.array([x,y,z])
             temp_all_pos[int(x),int(y),int(z)] = 0
         self.all_pos = np.copy(temp_all_pos)
+        
             # while self.check_overlap(ID):
             #     phi = np.random.rand()*np.pi
             #     theta = np.random.rand()*2*np.pi
@@ -453,7 +454,12 @@ class LN():
         
         self.ID_max = ID_run
         
-        #print('I have begun!')
+        print('I have begun!')
+        for ID in self.get_Tcell_ID():
+            print(self.agents[ID].div_can)
+            print(self.agents[ID].div_ability)
+            print(self.agents[ID].S)
+            print(self.agents[ID].avidity)
         
         
     def Move(self):
@@ -478,6 +484,7 @@ class LN():
             
         
         if self.agents[ID1].contact_status and self.agents[ID1].contact_can: 
+            #If we are 
             self.agents[ID1].contact_t += self.tau
             
             # if maximum interaction time is reached:
@@ -486,6 +493,7 @@ class LN():
                 self.agents[ID1].contact_status = False
                 self.agents[ID1].contact_can = False
                 self.agents[ID1].walk = True
+                self.T_to_DC -= 1
                 
         else: # else start interactions
             if self.agents[ID1].contact_can: # if able to interact
@@ -508,14 +516,20 @@ class LN():
                         sd = self.agents[ID1].tlim_p2_cog[1]
                         self.agents[ID1].contact_tlim = np.random.normal(mean, sd)
                         if self.agents[ID1].mature == True:
-                            self.agents[ID1].div_ability = True
+                            if self.agents[ID1].div_can:
+                                if self.div_check_temp:
+                                    print(self.time)
+                                    print(ID1)
+                                    print(self.agents[ID1].S)
+                                self.agents[ID1].div_ability = True
     
                     elif self.agents[ID1].S >= 200:
                         mean = self.agents[ID1].tlim_p3_cog[0]
                         sd = self.agents[ID1].tlim_p3_cog[1]
                         self.agents[ID1].contact_tlim = np.random.normal(mean, sd)
                         if self.agents[ID1].S >= 300:
-                            self.agents[ID1].div_ability = True
+                            if self.agents[ID1].div_can:                        
+                                self.agents[ID1].div_ability = True
                             self.agents[ID1].mature = True
 
                 elif not is_cog:
@@ -574,7 +588,7 @@ class LN():
         new_Tcell = Tcell()
         new_Tcell.cognate = self.agents[ID].cognate
         new_Tcell.div_can = False
-        new_Tcell.div_ability = True
+        new_Tcell.div_ability = False
         
         check = True
 
@@ -601,10 +615,10 @@ class LN():
     def prolif(self):
         for ID in self.get_Tcell_ID():
             #print(str(ID))
-            if self.agents[ID].div_ability:
-                #print('div ability yes')
+            if self.agents[ID].div_can:
+                #print('div can yes')
                 if self.agents[ID].div_can: # if can divide:
-                    #print('can div yes')
+                    #print('div ability yes')
                     if self.agents[ID].div_status: # if currently dividing:
                         #print('dividing, gimme a minute')
                         self.agents[ID].div_t += self.tau
@@ -625,13 +639,14 @@ class LN():
                             
                     else: # if not currently dividing, begin dividing:
                         self.agents[ID].div_status = True
+                            
                         self.agents[ID].div_n += 1
-                else: # if cannot divide due to cooldown period
-                    self.agents[ID].div_can_cd -= self.tau
-                    
-                    if self.agents[ID].div_can_cd <= 0:
-                        self.agents[ID].div_can_cd = self.agents[ID].div_can_cdlim
-                        self.agents[ID].div_can = True
+            else: # if cannot divide due to cooldown period
+                self.agents[ID].div_can_cd -= self.tau
+                
+                if self.agents[ID].div_can_cd <= 0:
+                    self.agents[ID].div_can_cd = self.agents[ID].div_can_cdlim
+                    self.agents[ID].div_can = True
         
         self.proliferations += 1
         #print('I have bow chika wow wowed' + str(self.proliferations) + 'times')
@@ -666,21 +681,23 @@ class LN():
         self.run_pct = self.time/self.end*100
         
         #Reset dead cell counter for the timestep
-        self.deadT = 0 
+        self.deadT = 0
+        
         for ID in self.get_Tcell_ID(): # for T cells
+            self.agents[ID].decay_T()
             if self.agents[ID].lifespan <= self.agents[ID].age:
                 self.agents[ID].alive = False
             if self.agents[ID].alive: # update age if alive
                 self.agents[ID].age += self.tau
                 
                 # Set T cell behavior "phase" based on age
-                if self.agents[ID].age < 60*60*8:
-                    self.agents[ID].phase = 1
-                elif self.agents[ID].age < 60*60*24:
-                    self.agents[ID].phase = 2
-                else:
-                    self.agents[ID].phase = 3
-                    
+                # if self.agents[ID].age < 60*60*8:
+                #     self.agents[ID].phase = 1
+                # elif self.agents[ID].age < 60*60*24:
+                #     self.agents[ID].phase = 2
+                # else:
+                #     self.agents[ID].phase = 3
+                
                 if not self.agents[ID].contact_can:
                     self.agents[ID].contact_can_cd -= self.tau
                     if self.agents[ID].contact_can_cd <= 0:
@@ -827,9 +844,7 @@ class LN():
         
         return[self.liveT, self.goneT, self.comps['Knee'].antigen[self.comps['Knee'].intime - 1], self.comps['Knee'].Tcell[self.comps['Knee'].intime - 1], self.cogDCs, self.antigen, self.bounds]
     
-        
-            
-        
+    
         
     def get_antigen(self, source_a):
          self.antigen = self.antigen + self.antigen*self.drain_rate*self.tau + source_a*3.2*10**-5*self.tau*self.drain_pct
