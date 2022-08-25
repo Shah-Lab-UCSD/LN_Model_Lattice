@@ -9,11 +9,13 @@ from Tcell import Tcell
 from DC import DC
 from TaAPC import TaAPC
 from Knee import Knee
+import random as rand
 
 import numpy as np
 import matplotlib as mpl
 import time
 import matplotlib.pyplot as plt
+from matplotlib import cm
 import copy
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -40,6 +42,8 @@ class LN():
         
         self.div_check_temp = True
         
+        self.stimcount = 0
+        
         self.run_pct = 0
         self.time = 0
         self.error = 0.00001
@@ -58,10 +62,12 @@ class LN():
         #cognate T cell parameters
         self.affinity_mean = affinity_mean
         self.affinity_shape = affinity_shape
+        self.Tegress = 0.000017
         
         #Parameters that we want to record
         self.deadT = 0
         self.goneT = 0
+        self.kneeT = 0
         self.T_to_DC = 0
         self.T_to_TaAPC = 0
         self.liveT = self.agent_ct['Tcell']
@@ -73,6 +79,7 @@ class LN():
         self.all_pos = np.array([])
         self.all_soma = np.array([])
         self.one_soma = np.array([])
+        self.vessels = np.array([])
         
         self.ID_max = 0
         self.Tcell_IDs = []
@@ -352,7 +359,7 @@ class LN():
         # Add defined number of each type of agent to agents:
         for i in range(self.agent_ct['Tcell']):
             self.agents[ID_run] = Tcell()
-            self.agents[ID_run].set_avidity(self.affinity_mean, self.affinity_shape)
+            self.agents[ID_run].set_avidity()
             self.Tcell_IDs.append(ID_run)
             ID_run += 1
         for i in range(self.agent_ct['DC']):
@@ -460,6 +467,8 @@ class LN():
             print(self.agents[ID].div_ability)
             print(self.agents[ID].S)
             print(self.agents[ID].avidity)
+            
+        self.aff_plot()
         
         
     def Move(self):
@@ -486,6 +495,7 @@ class LN():
         if self.agents[ID1].contact_status and self.agents[ID1].contact_can: 
             #If we are 
             self.agents[ID1].contact_t += self.tau
+            print
             
             # if maximum interaction time is reached:
             if self.agents[ID1].contact_t > self.agents[ID1].contact_tlim:
@@ -502,8 +512,14 @@ class LN():
                 self.agents[ID1].contact_status = True
                 self.agents[ID1].walk = False
                 
+                
                 if is_cog:
+                    #print('My stimulation level is ' + str(self.agents[ID1].S))
                     self.agents[ID1].stimulate_T()
+                    self.stimcount += 1
+                    #print('I am stimulating again, I have stimulated ' + str(self.stimcount) + ' times')
+                    #print('My new stimulation level is ' + str(self.agents[ID1].S))
+                    
                 
                 # Set time limit for interaction 
                     if self.agents[ID1].S < 100:
@@ -518,8 +534,7 @@ class LN():
                         if self.agents[ID1].mature == True:
                             if self.agents[ID1].div_can:
                                 if self.div_check_temp:
-                                    print(self.time)
-                                    print(ID1)
+                                    #print(self.time)
                                     print(self.agents[ID1].S)
                                 self.agents[ID1].div_ability = True
     
@@ -530,8 +545,13 @@ class LN():
                         if self.agents[ID1].S >= 300:
                             if self.agents[ID1].div_can:                        
                                 self.agents[ID1].div_ability = True
+                                if self.div_check_temp:
+                                    #print(self.time)
+                                    print(ID1)
+                                    print(self.agents[ID1].S)
+                                    
                             self.agents[ID1].mature = True
-
+                            print(str(ID1) + ' is ready to proliferate.')
                 elif not is_cog:
                     mean = self.agents[ID1].tlim_p1_noncog[0]
                     sd = self.agents[ID1].tlim_p1_noncog[1]
@@ -554,7 +574,7 @@ class LN():
         
         #update antigen values in various compartments
         self.comps['Knee'].inflam(self.tau) #update antigen values in Knee
-        self.comps['Knee'].update_cells(self.goneT) #Drain T cells to Knee
+        self.comps['Knee'].update_cells(self.kneeT) #Drain T cells to Knee
 
         #Check for T cells interacting with Soma:
         for ID in self.get_Tcell_ID():
@@ -570,7 +590,7 @@ class LN():
         self.interactions += 1
         #print('I have interacted' + str(self.interactions) + 'times')
 
-    def generate_Tcell(self, ID):
+    def generate_Tcell(self, ID, prolif = True):
         '''
         Generate/"Proliferate" a T cell.
 
@@ -599,9 +619,14 @@ class LN():
         shift = np.array([x, y, z])
 
         new_Tcell.pos = self.agents[ID].pos + shift
-
-        new_Tcell.avidity = self.agents[ID].avidity
-            
+        if prolif:
+            new_Tcell.avidity = self.agents[ID].avidity
+        
+        else:
+            new_Tcell.set_avidity()
+        
+        new_Tcell.S = self.agents[ID].S/2
+        
         self.liveT += 1
         
         self.ID_max += 1
@@ -617,7 +642,7 @@ class LN():
             #print(str(ID))
             if self.agents[ID].div_can:
                 #print('div can yes')
-                if self.agents[ID].div_can: # if can divide:
+                if self.agents[ID].div_ability: # if can divide:
                     #print('div ability yes')
                     if self.agents[ID].div_status: # if currently dividing:
                         #print('dividing, gimme a minute')
@@ -632,7 +657,11 @@ class LN():
                             self.agents[ID].div_ability = False
                             self.agents[ID].div_can = False
                             self.agents[ID].div_t = 0
+                            self.agents[ID].S = self.agents[ID].S/2
                             #print('division params reset')
+                            self.proliferations += 1
+                            print('I have bow chika wow wowed' + str(self.proliferations) + 'times')
+                            
                             
                             if self.agents[ID].div_n >= self.agents[ID].div_nlim:
                                 self.agents[ID].ability = False
@@ -648,8 +677,6 @@ class LN():
                     self.agents[ID].div_can_cd = self.agents[ID].div_can_cdlim
                     self.agents[ID].div_can = True
         
-        self.proliferations += 1
-        #print('I have bow chika wow wowed' + str(self.proliferations) + 'times')
         
         
 
@@ -669,9 +696,21 @@ class LN():
         DC_n = len(self.get_DC_ID())
         LN_vol = (Tcell_n*Tcell_vol + DC_n* Tcell_vol*7)/self.density_Tcell
         self.bounds = (3/4*LN_vol)**(1/3)
+        temp_shift = np.ceil(self.bounds/6) - self.bounds_int 
         self.bounds_int = np.ceil(self.bounds/6)
+        #print(self.bounds_int)
+        # self.border = int(np.ceil(self.bounds_int*10))
         
-        self.bound_updates += 1
+        #print(temp_shift)
+        
+        # if temp_shift > 0:
+        #     new_pos = np.ones(shape = (self.border*2, self.border*2, self.border*2))
+            
+        #     print(np.shape(new_pos))
+        #     new_pos[:np.shape(self.all_pos)[0], :np.shape(self.all_pos)[1], :np.shape(self.all_pos)[2]] = self.all_pos
+        #     self.all_pos = new_pos
+        
+        # self.bound_updates += 1
         #print('I have updated my bounds' + str(self.bound_updates) + 'times')
 
 
@@ -682,6 +721,8 @@ class LN():
         
         #Reset dead cell counter for the timestep
         self.deadT = 0
+        self.goneT = 0
+        self.kneeT = 0
         
         for ID in self.get_Tcell_ID(): # for T cells
             self.agents[ID].decay_T()
@@ -709,15 +750,29 @@ class LN():
                 if self.agents[ID].death_t > self.agents[ID].death_tlim: # clear cell if dead long enough
                     self.agents_removed[ID] = self.agents[ID]
                     self.deadT += 1 # Update dead cell counter
-                    
                     del self.agents[ID]
+                    
+            if rand.random() <= self.Tegress:    
+                #print(str(ID) + ' left at ' + str(self.time))
+                self.agents_egressed[ID] = self.agents[ID]
+                if self.agents[ID].mature:
+                    self.kneeT += 1
+                del self.agents[ID]
+                self.goneT += 1
+                
+            if rand.random() <= self.Tegress:
+                self.generate_Tcell(ID, prolif = False)
+                    
         for ID in self.get_DC_ID():
             DC = self.agents[ID]
             if DC.is_alive:
                 DC.lifespan -= self.tau
                 if DC.lifespan <=0:
+                    [x,y,z]  = self.agents[ID].pos
+                    self.all_soma[(x - 3):(x + 4), (y - 3):(y + 4), (z - 3):(z + 4)] -= np.copy(self.one_soma)
                     del self.agents[ID]
-                    
+                    print('##################### I HAVE DIED #####################')
+                    print('##################### WOE IS ME!!!#####################')
                     self.cogDCs -= 1
 
     def vis(self, save_file = False, filename = 'Figure'):
@@ -747,13 +802,18 @@ class LN():
         ax.set_zlabel('Z')
 
         ax.view_init(None, 45)
+        
+        #Set colors for different avidities
+        
+        cmap_f = cm.ScalarMappable(cmap = 'rainbow')
+        cmap_f.set_clim(0,3.5)
 
         for ID in self.get_Tcell_ID():
             # print("I'm plotting agent number" + str(ID))
             if not self.agents[ID].alive:
                 c = self.agents[ID].color_dead
             elif self.agents[ID].cognate:
-                c = self.agents[ID].color_cog
+                c = cmap_f.to_rgba(self.agents[ID].avidity)
             else:
                 c = self.agents[ID].color_noncog
                 
@@ -814,7 +874,7 @@ class LN():
         elif self.chkpt50 and self.run_pct >= 50:
             self.chkpt50 = False
             print('The simulation is at 50%, and it has been running for ' + str((time.time() - self.start_time)/60) + 'minutes and it is ' + str(time.time()))
-            #self.vis()
+            self.vis()
         
         elif self.chkpt75 and self.run_pct >= 75:
             self.chkpt75 = False
@@ -824,7 +884,8 @@ class LN():
         elif self.chkpt100 and self.run_pct >= 100:
             self.chkpt100 = False
             print('The simulation is at 100%, and it has been running for ' + str((time.time() - self.start_time)/60) + 'minutes and it is ' + str(time.time()))
-            # self.vis()
+            #self.vis()
+            self.aff_plot()
             total_runtime = str((time.time() - self.start_time)/60)
             with open('run_log.txt', 'w') as f:
                 f.write('Runtime: ' + total_runtime)
@@ -890,7 +951,13 @@ class LN():
             self.cogDCs += 1
             self.ID_max += 1
             self.agents[new_ID] = new_DC
-            
+    
+    def aff_plot(self):
+        affs = []
+        for ID in self.get_Tcell_ID():
+            affs.append(self.agents[ID].avidity)
+        bin_size = int(len(affs)/4)
+        plt.hist(affs, bins = 20)
         
 
 def disk(pos, radius):

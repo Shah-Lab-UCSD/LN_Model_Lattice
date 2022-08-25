@@ -7,6 +7,7 @@ Tcell.py
 """
 import numpy as np
 from Agent import Agent
+from scipy.stats import maxwell
 
 
 class Tcell(Agent):
@@ -36,6 +37,7 @@ class Tcell(Agent):
         self.lifespan = 60*60*24*10
         self.age = 0
         
+        
         self.alive = True
         self.death_t = 0 # time since cell death
         self.death_tlim = 60*60*8 # time since cell death until cell is cleared from simulation
@@ -48,7 +50,7 @@ class Tcell(Agent):
         self.cognate = True
         self.PD1 = 0 # PD1 expression arbitrary value
         self.avidity = 0
-        self.D = -0.001
+        self.D = 0.02
         self.S = 0
         self.E1 = 100 #Activation threshold to swithc to phase 2
         self.E2 = 200 #Activation threshold to switch to phase 3
@@ -117,13 +119,23 @@ class Tcell(Agent):
     
     def set_avidity(self, mean = 1, shape = 1.1, df = 5):
         ##self.avidity = np.random.lognormal(mean, np.log(shape))
-        self.avidity  = np.random.chisquare(df)/df*3
+        self.avidity  = maxwell.rvs(scale = 700)/1000
         
     def decay_T(self):
-        self.S -=self.S*self.D
+        #Rate Based Decay
+        #self.S -=self.D*self.S
+        
+        #Constant Decay
+        if self.S >= 0:
+            
+            self.S -= self.D
+        
+        else:
+            self.S = 0
         
     def stimulate_T(self):
         self.S += self.avidity
+        #print('I have been stimulated')
     
     def move_T(self, all_pos):
         x = int(self.pos[0])
@@ -147,6 +159,7 @@ class Tcell(Agent):
             self.pos = np.array([x,y,z])
             local_fill[x_shift,y_shift,z_shift] = 0
             return local_fill
+        
 
         
     

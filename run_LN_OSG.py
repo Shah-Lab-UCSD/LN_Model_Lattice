@@ -46,6 +46,9 @@ def sim(trials, agent_ct, cognate_Tcell, end = 60*60*24*8, vis_res = 40, affinit
             #LN1.vis()
         LN1.vis(save_file = True, filename = "END_" + fname)
         
+        all_pos = LN1.all_pos
+    
+        
         data = []
         for key in LN1.recorded_data:
             data.append(LN1.recorded_data[key])
@@ -113,19 +116,30 @@ except NameError:
     print('Parsed successfully.')
 else:
     print("Running in IPython")
-    conditions = [1.1, 2, 5, 10]
-    print('Please input the simulation time in seconds')
-    time = int(input())
-    print('Please input the fraction of cognate T cells')
-    cognate_Tcell = float(input())
-    print('Please input the total number of T cells to simulate')
-    Tcell_num = int(input())
-    print('Please input the mean for the lognormal distribution')
-    mean = float(input())
-    print('Please input the shape factor for the lognormal distribution')
-    shape = float(input())
-    print('Please input the inital antigen concentration in the knee')
-    a_conc_0 = float(input())
+    print('Use defaults?')
+    defaults = str(input())
+    if defaults == 'n':
+        conditions = [1.1, 2, 5, 10]
+        print('Please input the simulation time in seconds')
+        time = int(input())
+        print('Please input the fraction of cognate T cells')
+        cognate_Tcell = float(input())
+        print('Please input the total number of T cells to simulate')
+        Tcell_num = int(input())
+        print('Please input the mean for the lognormal distribution')
+        mean = float(input())
+        print('Please input the shape factor for the lognormal distribution')
+        shape = float(input())
+        print('Please input the inital antigen concentration in the knee')
+        a_conc_0 = float(input())
+    elif defaults == 'y':
+        time = 864000/4*3
+        cognate_Tcell = 1
+        Tcell_num = 100
+        mean = 1
+        
+        shape = 1.1
+        a_conc_0 = 10000
     
 agent_ct = {'Tcell':Tcell_num, 'DC':0, 'TaAPC':0}
 filename = "Data_time" + str(time) + "_cog" + str(cognate_Tcell) + "_T" + str(Tcell_num) + "_mean" + str(mean) + "_shape" + str(shape) + ".csv"
