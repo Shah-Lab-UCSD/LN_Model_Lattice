@@ -8,6 +8,7 @@ Tcell.py
 import numpy as np
 from Agent import Agent
 from scipy.stats import maxwell
+import random as rand
 
 
 class Tcell(Agent):
@@ -41,6 +42,11 @@ class Tcell(Agent):
         self.alive = True
         self.death_t = 0 # time since cell death
         self.death_tlim = 60*60*8 # time since cell death until cell is cleared from simulation
+        
+        self.inhib = False # If a cell is inhibited by PDL1 signaling
+        self.can_inhib = False # If a cell can be inhibited by PDL1 signaling (if it is antigen experienced/PD1 positive)
+        self.inhib_t = 0 # How long a cell has left before the inhibition fades
+        self.inhib_tlim = 60*60*.5 # Time that a cell is inhibited for after PD1/PDL1 signaling
         
         ########## ACTIVATION AND EXPANSION: ##########
         
@@ -117,9 +123,14 @@ class Tcell(Agent):
     
     ## setters
     
-    def set_avidity(self, mean = 1, shape = 1.1, df = 5):
+    def set_avidity(self, s = 1000, shape = 1.1, df = 5, norm = 1000, **kwargs):
         ##self.avidity = np.random.lognormal(mean, np.log(shape))
-        self.avidity  = maxwell.rvs(scale = 700)/1000
+        
+        seed = kwargs.get('seed', None)
+        
+        rand.seed(seed)
+        
+        self.avidity  = maxwell.rvs(scale = s)/norm
         
     def decay_T(self):
         #Rate Based Decay
@@ -134,8 +145,13 @@ class Tcell(Agent):
             self.S = 0
         
     def stimulate_T(self):
-        self.S += self.avidity
+        if not self.inhib:
+            self.S += self.avidity
+        else:
+            self.S += self.avidity/10.0 
         #print('I have been stimulated')
+        
+    
     
     def move_T(self, all_pos):
         x = int(self.pos[0])
@@ -160,6 +176,9 @@ class Tcell(Agent):
             local_fill[x_shift,y_shift,z_shift] = 0
             return local_fill
         
-
+    def pd1_inhib(self):
+        self.inhib = True
+        self.inhib_t = self.inhib_tlim
+        
         
     

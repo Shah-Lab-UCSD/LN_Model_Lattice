@@ -21,10 +21,12 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 class LN():
-    def __init__(self, agent_ct, cognate_Tcell, end, vis_res, affinity_mean = 1, affinity_shape = 1.1, antigen_conc_0 = 10**3):
+    def __init__(self, agent_ct, cognate_Tcell, end, vis_res, affinity_scale, affinity_shape = 1.1, antigen_conc_0 = 10**3, seed = 0):
         # Figure 2: vary DC cognate concentration/frequency in cognate_DC
         # Figure 3: vary number of starting T cells in agent_ct <Here I think we rather want to vary cognate T cell fraction
         # Figure 4: introduce TaAPCs into simulation in run_LN.py file 
+        
+        self.seed = seed
         
         self.tau = 12 # seconds per frame
         self.end = end # time of ending simulation; i.e. 60*60*24*5 (5 days)
@@ -60,7 +62,7 @@ class LN():
         self.cognate_Tcell_n = int(np.ceil(self.agent_ct['Tcell'] * self.cognate_Tcell))
         
         #cognate T cell parameters
-        self.affinity_mean = affinity_mean
+        self.affinity_scale = affinity_scale
         self.affinity_shape = affinity_shape
         self.Tegress = 0.000017
         
@@ -80,6 +82,7 @@ class LN():
         self.all_soma = np.array([])
         self.one_soma = np.array([])
         self.vessels = np.array([])
+        self.all_taapc = np.array([])
         
         self.ID_max = 0
         self.Tcell_IDs = []
@@ -348,6 +351,7 @@ class LN():
         self.all_pos = np.ones((self.border * 2,self.border * 2,self.border * 2))
         self.one_soma = self.soma_lattice()
         self.all_soma = np.zeros((self.border * 2,self.border * 2,self.border * 2))
+        self.all_taapc = np.zeros((self.border * 2, self.border * 2, self.border * 2))
         
         # Record the simulation start time
         self.start_time = time.time()
@@ -355,11 +359,13 @@ class LN():
         # Initialize the Knee drainage compartment
         self.comps['Knee'] = Knee(self.antigen_conc_0)
         
+        rand.seed(self.seed)
+
         ID_run = 0
         # Add defined number of each type of agent to agents:
         for i in range(self.agent_ct['Tcell']):
             self.agents[ID_run] = Tcell()
-            self.agents[ID_run].set_avidity()
+            self.agents[ID_run].set_avidity(s = self.affinity_scale, seed = rand.randint(0,1000000))
             self.Tcell_IDs.append(ID_run)
             ID_run += 1
         for i in range(self.agent_ct['DC']):
@@ -387,6 +393,24 @@ class LN():
             self.agents[ID].pos = np.array([x,y,z])
             temp_all_pos[int(x),int(y),int(z)] = 0
         self.all_pos = np.copy(temp_all_pos)
+        
+        #place all TaAPCs
+        temp_taapc_pos = np.copy(self.all_taapc)
+        for ID in self.TaAPC_IDs:
+            ag = self.agents[ID]
+            
+            phi = np.random.rand()*np.pi
+            theta = np.random.rand()*2*np.pi
+            r = np.random.rand()*self.bounds
+            
+            x = np.round(r*np.sin(phi)*np.cos(theta)/6 + self.border)
+            y = np.round(r* np.sin(phi)*np.sin(theta)/6 + self.border)
+            z = np.round(r*np.cos(phi)/6 + self.border)
+            
+            ag.pos = np.array([x,y,z])
+            temp_taapc_pos[int(x),int(y),int(z)] = 1
+        
+        self.all_taapc = np.copy(temp_taapc_pos)
         
             # while self.check_overlap(ID):
             #     phi = np.random.rand()*np.pi
@@ -463,9 +487,9 @@ class LN():
         
         print('I have begun!')
         for ID in self.get_Tcell_ID():
-            print(self.agents[ID].div_can)
-            print(self.agents[ID].div_ability)
-            print(self.agents[ID].S)
+            #print(self.agents[ID].div_can)
+            #print(self.agents[ID].div_ability)
+            #print(self.agents[ID].S)
             print(self.agents[ID].avidity)
             
         self.aff_plot()
@@ -488,6 +512,7 @@ class LN():
 
     def interact_DC(self, ID1):
         
+        #Check if current T cell is cognate
         is_cog = self.agents[ID1].cognate
         # if already interacting, update parameters:
             
@@ -495,8 +520,7 @@ class LN():
         if self.agents[ID1].contact_status and self.agents[ID1].contact_can: 
             #If we are 
             self.agents[ID1].contact_t += self.tau
-            print
-            
+
             # if maximum interaction time is reached:
             if self.agents[ID1].contact_t > self.agents[ID1].contact_tlim:
                 self.agents[ID1].contact_t = 0
@@ -520,6 +544,10 @@ class LN():
                     #print('I am stimulating again, I have stimulated ' + str(self.stimcount) + ' times')
                     #print('My new stimulation level is ' + str(self.agents[ID1].S))
                     
+                    if self.agents[ID1].S > 180:
+                        self.agents[ID1].can_inhib = True
+                        #print('I am cell ' + str(ID1) + ' and my stimluation level is ' + str(self.agents[ID1].S) + ' and my can_inhib value is ' + str(self.agents[ID1].can_inhib))
+                        
                 
                 # Set time limit for interaction 
                     if self.agents[ID1].S < 100:
@@ -527,15 +555,15 @@ class LN():
                         sd = self.agents[ID1].tlim_p1_cog[1]
                         self.agents[ID1].contact_tlim = np.random.normal(mean, sd)
                             
-                    elif self.agents[ID1].S >= 100 and self.agents[ID1].S < 200:
+                    elif (self.agents[ID1].S >= 100 and self.agents[ID1].S < 200):
                         mean = self.agents[ID1].tlim_p2_cog[0]
                         sd = self.agents[ID1].tlim_p2_cog[1]
                         self.agents[ID1].contact_tlim = np.random.normal(mean, sd)
                         if self.agents[ID1].mature == True:
                             if self.agents[ID1].div_can:
-                                if self.div_check_temp:
+                                #if self.div_check_temp:
                                     #print(self.time)
-                                    print(self.agents[ID1].S)
+                                    #print(self.agents[ID1].S)
                                 self.agents[ID1].div_ability = True
     
                     elif self.agents[ID1].S >= 200:
@@ -545,10 +573,10 @@ class LN():
                         if self.agents[ID1].S >= 300:
                             if self.agents[ID1].div_can:                        
                                 self.agents[ID1].div_ability = True
-                                if self.div_check_temp:
+                                #if self.div_check_temp:
                                     #print(self.time)
-                                    print(ID1)
-                                    print(self.agents[ID1].S)
+                                    #print(ID1)
+                                    #print(self.agents[ID1].S)
                                     
                             self.agents[ID1].mature = True
                             print(str(ID1) + ' is ready to proliferate.')
@@ -556,6 +584,17 @@ class LN():
                     mean = self.agents[ID1].tlim_p1_noncog[0]
                     sd = self.agents[ID1].tlim_p1_noncog[1]
                     self.agents[ID1].contact_tlim = np.random.normal(mean, sd)
+    
+    def interact_TaAPC(self, ID1):
+        
+        ag = self.agents[ID1]
+            
+        if not ag.inhib:
+            print('' + str(ag.inhib))
+            if ag.can_inhib:
+                print(' ' + str(ag.can_inhib))
+                ag.pd1_inhib()
+                print('Im inhibited and Im cell ' + str(ID1) + '. My stimulation level is ' + str(ag.S))
             
 
     def Interact(self):
@@ -582,6 +621,13 @@ class LN():
             if self.all_soma[int(x),int(y),int(z)] > 0:
                 if self.agents[ID].alive:
                     self.interact_DC(ID)
+            
+            if self.all_taapc[int(x),int(y),int(z)] > 0:
+                if self.agents[ID].alive:
+                    #print('I am cell ' + str(ID) + ' and I interacted with a TaAPC at ' + str(self.time))
+                    #print('My can_inhib value is ' + str(self.agents[ID].can_inhib))
+                    self.interact_TaAPC(ID)
+                
                 # elif self.all_TaAPC > 0:
                 #     self.interact_TaAPC()
                 #     # Kill cell if interacting with TaAPC
@@ -610,6 +656,7 @@ class LN():
         new_Tcell.div_can = False
         new_Tcell.div_ability = False
         
+        
         check = True
 
         # Random position of new T cell:
@@ -621,9 +668,10 @@ class LN():
         new_Tcell.pos = self.agents[ID].pos + shift
         if prolif:
             new_Tcell.avidity = self.agents[ID].avidity
+            new_Tcell.can_inhib = self.agents[ID].can_inhib
         
         else:
-            new_Tcell.set_avidity()
+            new_Tcell.set_avidity(s = self.affinity_scale)
         
         new_Tcell.S = self.agents[ID].S/2
         
@@ -726,6 +774,13 @@ class LN():
         
         for ID in self.get_Tcell_ID(): # for T cells
             self.agents[ID].decay_T()
+            
+            if self.agents[ID].inhib:
+                self.agents[ID].inhib_t -= self.tau
+                
+                if self.agents[ID].inhib_t <= 0:
+                    self.agents[ID].inhib = False
+                    
             if self.agents[ID].lifespan <= self.agents[ID].age:
                 self.agents[ID].alive = False
             if self.agents[ID].alive: # update age if alive
@@ -775,7 +830,7 @@ class LN():
                     print('##################### WOE IS ME!!!#####################')
                     self.cogDCs -= 1
 
-    def vis(self, save_file = False, filename = 'Figure'):
+    def vis(self, save_file = False, filename = 'LN_Visualization'):
         '''
         Plot and visualize all agents within the computational domain.
 
@@ -828,15 +883,18 @@ class LN():
                 plotSph(ax, disk(self.agents[ID].pos*6-self.border*6, self.agents[ID].radius), self.agents[ID].color_cog)
             
         for ID in self.get_TaAPC_ID():
-            plotSph(ax, disk(self.agents[ID].pos*6-self.border*6, self.agents[ID].radius), self.agents[ID])
+            plotSph(ax, disk(self.agents[ID].pos*6-self.border*6, self.agents[ID].radius), self.agents[ID].color)
+            
         
         if save_file == False:
             
             plt.show()
+            plt.clf()
             
         elif save_file == True:
             filename = filename + '.png'
             plt.savefig(filename)
+            plt.clf()
 
     
     def compile_data(self):
@@ -874,7 +932,8 @@ class LN():
         elif self.chkpt50 and self.run_pct >= 50:
             self.chkpt50 = False
             print('The simulation is at 50%, and it has been running for ' + str((time.time() - self.start_time)/60) + 'minutes and it is ' + str(time.time()))
-            self.vis()
+            #self.vis()
+            #self.aff_plot()
         
         elif self.chkpt75 and self.run_pct >= 75:
             self.chkpt75 = False
@@ -885,14 +944,14 @@ class LN():
             self.chkpt100 = False
             print('The simulation is at 100%, and it has been running for ' + str((time.time() - self.start_time)/60) + 'minutes and it is ' + str(time.time()))
             #self.vis()
-            self.aff_plot()
+            #self.aff_plot()
             total_runtime = str((time.time() - self.start_time)/60)
             with open('run_log.txt', 'w') as f:
                 f.write('Runtime: ' + total_runtime)
                 f.write('\n')
                 f.write('Tcell Start Count: ' + str(self.agent_ct['Tcell']))
                 f.write('\n')
-                f.write('Affinity Mean: ' + str(self.affinity_mean))
+                f.write('Affinity Scale: ' + str(self.affinity_scale))
                 f.write('\n')
                 f.write('Affinity Shape: ' + str(self.affinity_shape))
                 f.write('\n')
@@ -901,11 +960,30 @@ class LN():
                 f.write('Simulation Time: ' + str(self.time))
                 f.write('\n' + 'Number of Timesteps: ' + str(self.time/self.tau))
                 f.write('\n' + 'Initial antigen concentration: ' + str(self.antigen_conc_0))
+        
+        avs= np.zeros(self.liveT)
+        i = 0
+        for ID in self.get_Tcell_ID(): # for T cells
+            avs[i] = self.agents[ID].avidity
+            i += 1
+            
+        av_avs = np.mean(avs)
+        sd_avs = np.std(avs)
+            
                 
         
-        return[self.liveT, self.goneT, self.comps['Knee'].antigen[self.comps['Knee'].intime - 1], self.comps['Knee'].Tcell[self.comps['Knee'].intime - 1], self.cogDCs, self.antigen, self.bounds]
-    
-    
+        return[self.liveT, self.goneT, self.comps['Knee'].antigen[self.comps['Knee'].intime - 1], self.comps['Knee'].Tcell[self.comps['Knee'].intime - 1], self.cogDCs, self.antigen, self.bounds, av_avs, sd_avs]
+        
+    def export_av_bins(self):
+        bin_vals = np.linspace(0,6,31)
+        avs = np.zeros(self.liveT)
+        i = 0
+        for ID in self.get_Tcell_ID():
+            avs[i] = self.agents[ID].avidity
+            i += 1
+        avs_bins = plt.hist(avs, bin_vals)[0]
+        
+        return avs_bins
         
     def get_antigen(self, source_a):
          self.antigen = self.antigen + self.antigen*self.drain_rate*self.tau + source_a*3.2*10**-5*self.tau*self.drain_pct
@@ -952,12 +1030,24 @@ class LN():
             self.ID_max += 1
             self.agents[new_ID] = new_DC
     
-    def aff_plot(self):
+    def aff_plot(self, save_file = False, filename = 'Affinity_Histogram'):
+        fig = plt.figure()
         affs = []
         for ID in self.get_Tcell_ID():
             affs.append(self.agents[ID].avidity)
         bin_size = int(len(affs)/4)
         plt.hist(affs, bins = 20)
+        
+        if save_file == False:
+            
+            plt.show()
+            plt.clf()
+            
+        elif save_file == True:
+            filename = filename + '.png'
+            plt.savefig(filename)
+            plt.clf()
+            
         
 
 def disk(pos, radius):

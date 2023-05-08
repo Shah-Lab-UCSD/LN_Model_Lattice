@@ -14,10 +14,10 @@ class TaAPC(Agent):
         super().__init__()
         
         self.cognate = True
-        self.color = '#FF0000'
+        self.color = '#FF69B4'
         
         ########## SIZE & MOVEMENT: ##########
-        self.size = 5.6
+        self.size = 2.0
         self.radius = self.size/2 # DC soma radius
         
         self.v = 0
